@@ -1,0 +1,39 @@
+# Python virtual environments & caches
+my_env/
+.venv/
+venv/
+ENV/
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+dist/
+build/
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Environment variables & secrets
+.env
+.env.local
+
+# SpecKit, Agent tooling & reference documents (not needed at runtime)
+.agents/
+.specify/
+specs/
+Youtube_transcripts.pdf
+
+# Gradio & HuggingFace local caches
+flagged/
+.gradio/
+.cache/
+models--*/
+
+# OS & IDE files
+.DS_Store
+Thumbs.db
+*.tmp
+*.swp
+*.log
+.vscode/
+.idea/

@@ -1,0 +1,12 @@
+youtube-transcript-api>=1.2.1
+faiss-cpu>=1.8.0
+langchain>=0.2.6
+langchain-community>=0.2.6
+langchain-core>=0.2.6
+langchain-text-splitters>=0.2.0
+langchain-google-genai>=1.0.0
+langchain-huggingface>=0.0.3
+sentence-transformers>=2.7.0
+gradio>=4.44.1
+python-dotenv>=1.0.1
+pytest>=8.0.0
