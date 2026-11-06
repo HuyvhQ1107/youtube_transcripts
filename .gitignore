@@ -22,6 +22,8 @@ htmlcov/
 .specify/
 specs/
 Youtube_transcripts.pdf
+requirements-local.txt
+app.py
 
 # Gradio & HuggingFace local caches
 flagged/

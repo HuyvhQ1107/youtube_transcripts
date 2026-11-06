@@ -284,26 +284,52 @@ def setup_embedding_model(
     project_id: Optional[str] = None,
 ) -> Any:
     """
-    Initialize and cache the local HuggingFace sentence-transformers embedding model.
-    Defaults to 'sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2' on CPU,
-    requiring ~250-400MB system RAM and 0MB GPU VRAM (safe for 16GB RAM + 2GB VRAM machines).
+    Initialize and cache the embedding model.
+    - On local machines (when sentence-transformers & langchain-huggingface are installed
+      and VERCEL is not set): defaults to 'sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2'
+      on CPU (~250-400MB RAM, 0MB GPU VRAM).
+    - On Vercel Serverless (or when EMBEDDING_PROVIDER=gemini / local packages are absent):
+      automatically uses GoogleGenerativeAIEmbeddings ('models/gemini-embedding-001') with
+      the same GOOGLE_API_KEY so the Serverless bundle stays well under Vercel's 250MB limit.
     """
     global _cached_embedding_model
     if _cached_embedding_model is not None:
         return _cached_embedding_model
 
-    from langchain_huggingface import HuggingFaceEmbeddings
+    provider = os.getenv("EMBEDDING_PROVIDER", "").strip().lower()
+    is_vercel = bool(os.getenv("VERCEL") or os.getenv("VERCEL_ENV"))
 
-    embedding_model_name = os.getenv(
-        "EMBEDDING_MODEL",
-        "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2",
-    ).strip()
-    device = os.getenv("EMBEDDING_DEVICE", "cpu").strip() or "cpu"
+    if provider != "gemini" and not is_vercel:
+        try:
+            from langchain_huggingface import HuggingFaceEmbeddings
 
-    _cached_embedding_model = HuggingFaceEmbeddings(
-        model_name=embedding_model_name,
-        model_kwargs={"device": device},
-        encode_kwargs={"normalize_embeddings": True},
+            embedding_model_name = os.getenv(
+                "EMBEDDING_MODEL",
+                "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2",
+            ).strip()
+            device = os.getenv("EMBEDDING_DEVICE", "cpu").strip() or "cpu"
+
+            _cached_embedding_model = HuggingFaceEmbeddings(
+                model_name=embedding_model_name,
+                model_kwargs={"device": device},
+                encode_kwargs={"normalize_embeddings": True},
+            )
+            return _cached_embedding_model
+        except ImportError:
+            pass
+
+    from langchain_google_genai import GoogleGenerativeAIEmbeddings
+
+    api_key = ""
+    if isinstance(credentials, dict):
+        api_key = credentials.get("api_key", "") or os.getenv("GOOGLE_API_KEY", "")
+    else:
+        api_key = os.getenv("GOOGLE_API_KEY", "")
+
+    gemini_emb_model = os.getenv("GEMINI_EMBEDDING_MODEL", "models/gemini-embedding-001").strip()
+    _cached_embedding_model = GoogleGenerativeAIEmbeddings(
+        model=gemini_emb_model,
+        google_api_key=api_key,
     )
     return _cached_embedding_model
 
