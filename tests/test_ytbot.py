@@ -303,7 +303,8 @@ def test_session_cache_reused_for_same_video_and_invalidated_on_url_change(monke
 
 
 def test_youtube_proxy_configuration_from_env(monkeypatch):
-    # 1. Default (no proxy env vars) -> None
+    # 1. Default (no proxy env vars, built-in WARP disabled) -> None
+    monkeypatch.setenv("DISABLE_BUILTIN_WARP", "true")
     monkeypatch.delenv("WEBSHARE_PROXY_USERNAME", raising=False)
     monkeypatch.delenv("WEBSHARE_PROXY_PASSWORD", raising=False)
     monkeypatch.delenv("YOUTUBE_PROXY_URL", raising=False)

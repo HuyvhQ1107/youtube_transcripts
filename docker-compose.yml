@@ -20,7 +20,7 @@ services:
       args:
         # Set to "true" if you want to bake the HuggingFace embedding model into the image at build time
         PRELOAD_MODEL: "false"
-    image: huyvhq1107/youtube-transcripts-bot:1.1.0
+    image: huyvhq1107/youtube-transcripts-bot:1.1.1
     container_name: youtube-transcripts-bot
     depends_on:
       - warp

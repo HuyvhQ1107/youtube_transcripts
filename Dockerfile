@@ -30,7 +30,14 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 RUN pip install --no-cache-dir "PySocks>=1.7.1"
 
-LABEL release_version="1.1.0"
+# Install lightweight userspace Cloudflare WARP tools (wgcf + wireproxy) for automatic Cloud IP bypass
+RUN ARCH=$(dpkg --print-architecture) && \
+    curl -fsSL "https://github.com/ViRb3/wgcf/releases/download/v2.3.1/wgcf_2.3.1_linux_${ARCH}" -o /usr/local/bin/wgcf && \
+    chmod +x /usr/local/bin/wgcf && \
+    curl -fsSL "https://github.com/pufferffish/wireproxy/releases/download/v1.1.3/wireproxy_linux_${ARCH}.tar.gz" | tar -xz -C /usr/local/bin wireproxy && \
+    chmod +x /usr/local/bin/wireproxy
+
+LABEL release_version="1.1.1"
 
 # Copy application source code and tests
 COPY ytbot.py app.py .env.example ./

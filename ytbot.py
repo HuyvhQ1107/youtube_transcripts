@@ -15,7 +15,12 @@ from __future__ import annotations
 
 import os
 import re
+import shutil
+import socket
+import subprocess
+import time
 import warnings
+from pathlib import Path
 from typing import Any, List, Optional, Tuple
 
 from dotenv import load_dotenv
@@ -52,6 +57,8 @@ processed_transcript: str = ""
 faiss_index: Optional[Any] = None
 transcript_status_msg: str = "Ready. Enter a YouTube Video URL to begin."
 _cached_embedding_model: Optional[Any] = None
+_warp_proxy_url: Optional[str] = None
+_warp_init_attempted: bool = False
 
 
 def get_transcript_status() -> str:
@@ -90,14 +97,105 @@ def get_video_id(url: str) -> Optional[str]:
     return None
 
 
+def _is_port_open(host: str, port: int, timeout: float = 0.5) -> bool:
+    """Return True if a TCP connection to `host:port` succeeds."""
+    try:
+        with socket.create_connection((host, port), timeout=timeout):
+            return True
+    except OSError:
+        return False
+
+
+def _ensure_builtin_warp_proxy() -> Optional[str]:
+    """
+    Automatically register a free Cloudflare WARP profile via `wgcf` and start a local
+    userspace `wireproxy` SOCKS5 server on `127.0.0.1:40000` when `wgcf` and `wireproxy`
+    binaries are installed inside the Docker container.
+    Requires zero root/NET_ADMIN privileges and works out-of-the-box in single-image deployments.
+    """
+    global _warp_proxy_url, _warp_init_attempted
+
+    if os.getenv("DISABLE_BUILTIN_WARP", "").strip().lower() in ("1", "true", "yes"):
+        return None
+
+    port = int(os.getenv("WARP_LOCAL_PORT", "40000"))
+    proxy_url = f"socks5h://127.0.0.1:{port}"
+
+    if _is_port_open("127.0.0.1", port):
+        _warp_proxy_url = proxy_url
+        return _warp_proxy_url
+
+    if _warp_init_attempted:
+        return _warp_proxy_url
+    _warp_init_attempted = True
+
+    wgcf_bin = shutil.which("wgcf")
+    wireproxy_bin = shutil.which("wireproxy")
+    if not wgcf_bin or not wireproxy_bin:
+        return None
+
+    warp_dir = Path(os.getenv("WARP_CONFIG_DIR", "/tmp/warp"))
+    try:
+        warp_dir.mkdir(parents=True, exist_ok=True)
+        account_toml = warp_dir / "wgcf-account.toml"
+        profile_conf = warp_dir / "wgcf-profile.conf"
+        wireproxy_conf = warp_dir / "wireproxy.conf"
+
+        if not account_toml.exists():
+            subprocess.run(
+                [wgcf_bin, "register", "--accept-tos"],
+                cwd=str(warp_dir),
+                check=True,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                timeout=20,
+            )
+
+        if not profile_conf.exists():
+            subprocess.run(
+                [wgcf_bin, "generate"],
+                cwd=str(warp_dir),
+                check=True,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                timeout=20,
+            )
+
+        if profile_conf.exists() and not wireproxy_conf.exists():
+            base_cfg = profile_conf.read_text(encoding="utf-8")
+            wireproxy_conf.write_text(
+                f"{base_cfg}\n\n[Socks5]\nBindAddress = 127.0.0.1:{port}\n",
+                encoding="utf-8",
+            )
+
+        if wireproxy_conf.exists():
+            subprocess.Popen(
+                [wireproxy_bin, "-c", str(wireproxy_conf)],
+                cwd=str(warp_dir),
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
+            for _ in range(25):
+                if _is_port_open("127.0.0.1", port):
+                    _warp_proxy_url = proxy_url
+                    return _warp_proxy_url
+                time.sleep(0.2)
+    except Exception:
+        return None
+
+    return None
+
+
 def _build_youtube_proxy_config() -> Any:
     """
     Build a `youtube-transcript-api` proxy configuration from environment variables
-    to work around YouTube cloud IP blocks (RequestBlocked / IpBlocked on Oracle Cloud, AWS, GCP, etc.):
+    or built-in Cloudflare WARP (`wgcf` + `wireproxy`) to work around YouTube cloud IP blocks
+    (RequestBlocked / IpBlocked on Oracle Cloud, AWS, GCP, etc.):
     1. Webshare Residential Rotating Proxy: `WEBSHARE_PROXY_USERNAME` + `WEBSHARE_PROXY_PASSWORD`
        (plus optional comma-separated `WEBSHARE_PROXY_LOCATIONS`, e.g. 'vn,sg,us')
     2. Generic HTTP/HTTPS/SOCKS5 Proxy: `YOUTUBE_PROXY_URL`, `YOUTUBE_HTTP_PROXY`, or `YOUTUBE_HTTPS_PROXY`
-       (e.g., `http://user:pass@host:port` or `socks5h://warp:1080`)
+       (e.g., `http://user:pass@host:port` or `socks5h://127.0.0.1:40000`)
+    3. Automatic Built-in Cloudflare WARP SOCKS5 Proxy (`socks5h://127.0.0.1:40000`) when running inside Docker.
     """
     ws_user = os.getenv("WEBSHARE_PROXY_USERNAME", "").strip()
     ws_pass = os.getenv("WEBSHARE_PROXY_PASSWORD", "").strip()
@@ -117,6 +215,13 @@ def _build_youtube_proxy_config() -> Any:
         return GenericProxyConfig(
             http_url=http_url,
             https_url=https_url,
+        )
+
+    builtin_warp = _ensure_builtin_warp_proxy()
+    if builtin_warp and GenericProxyConfig is not None:
+        return GenericProxyConfig(
+            http_url=builtin_warp,
+            https_url=builtin_warp,
         )
 
     return None
