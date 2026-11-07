@@ -2,7 +2,7 @@
 FROM python:3.11-slim
 
 LABEL maintainer="YouTube Transcripts Summarizer & Q&A Bot"
-LABEL version="1.1.0"
+LABEL version="1.0.0"
 LABEL description="AI-Powered YouTube Video Summarizer & RAG Q&A Bot (LangChain, FAISS, HuggingFace Embeddings, Google Gemini, Gradio)"
 
 # Prevent Python from writing .pyc files and enable unbuffered logging
@@ -28,6 +28,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # Install Python dependencies first for optimal Docker layer caching
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install --no-cache-dir "PySocks>=1.7.1"
+
+LABEL release_version="1.1.0"
 
 # Copy application source code and tests
 COPY ytbot.py app.py .env.example ./
