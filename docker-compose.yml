@@ -1,0 +1,50 @@
+services:
+  warp:
+    image: caomingjun/warp:latest
+    container_name: youtube-transcripts-warp
+    restart: unless-stopped
+    environment:
+      - WARP_SLEEP=2
+    cap_add:
+      - NET_ADMIN
+    sysctls:
+      - net.ipv6.conf.all.disable_ipv6=0
+      - net.ipv4.conf.all.src_valid_mark=1
+    volumes:
+      - warp_data:/var/lib/cloudflare-warp
+
+  ytbot:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        # Set to "true" if you want to bake the HuggingFace embedding model into the image at build time
+        PRELOAD_MODEL: "false"
+    image: huyvhq1107/youtube-transcripts-bot:1.1.0
+    container_name: youtube-transcripts-bot
+    depends_on:
+      - warp
+    ports:
+      - "${PORT:-7860}:7860"
+    env_file:
+      - .env
+    environment:
+      - GOOGLE_API_KEY=${GOOGLE_API_KEY}
+      - GEMINI_MODEL=${GEMINI_MODEL:-gemini-3.5-flash-lite}
+      - EMBEDDING_MODEL=${EMBEDDING_MODEL:-sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2}
+      - EMBEDDING_DEVICE=${EMBEDDING_DEVICE:-cpu}
+      - PORT=7860
+      - WEBSHARE_PROXY_USERNAME=${WEBSHARE_PROXY_USERNAME:-}
+      - WEBSHARE_PROXY_PASSWORD=${WEBSHARE_PROXY_PASSWORD:-}
+      - WEBSHARE_PROXY_LOCATIONS=${WEBSHARE_PROXY_LOCATIONS:-}
+      - YOUTUBE_PROXY_URL=${YOUTUBE_PROXY_URL:-socks5h://warp:1080}
+      - YOUTUBE_HTTP_PROXY=${YOUTUBE_HTTP_PROXY:-}
+      - YOUTUBE_HTTPS_PROXY=${YOUTUBE_HTTPS_PROXY:-}
+    volumes:
+      # Persist HuggingFace local embedding model cache across container restarts
+      - hf_cache:/app/.cache/huggingface
+    restart: unless-stopped
+
+volumes:
+  hf_cache:
+  warp_data:

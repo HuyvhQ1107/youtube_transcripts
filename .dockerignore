@@ -1,0 +1,46 @@
+# Virtual environments
+my_env/
+.venv/
+venv/
+ENV/
+
+# Python cache & build artifacts
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+dist/
+build/
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Environment variables & secrets (passed at runtime via --env-file or docker-compose)
+.env
+.env.*
+!.env.example
+
+# Git & IDE metadata
+.git/
+.gitignore
+.vscode/
+.idea/
+
+# SpecKit, Agent tooling & reference PDFs (not needed inside container image)
+.agents/
+.specify/
+specs/
+Youtube_transcripts.pdf
+
+# Local caches
+flagged/
+.gradio/
+.cache/
+models--*/
+
+# OS files
+.DS_Store
+Thumbs.db
+*.tmp
+*.swp
+*.log

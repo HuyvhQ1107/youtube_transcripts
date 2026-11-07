@@ -300,3 +300,32 @@ def test_session_cache_reused_for_same_video_and_invalidated_on_url_change(monke
     assert fetch_calls == ["T-D1OfcDW1M", "dQw4w9WgXcQ"]
     assert ytbot.current_video_id == "dQw4w9WgXcQ"
     assert "dQw4w9WgXcQ" in ytbot.processed_transcript
+
+
+def test_youtube_proxy_configuration_from_env(monkeypatch):
+    # 1. Default (no proxy env vars) -> None
+    monkeypatch.delenv("WEBSHARE_PROXY_USERNAME", raising=False)
+    monkeypatch.delenv("WEBSHARE_PROXY_PASSWORD", raising=False)
+    monkeypatch.delenv("YOUTUBE_PROXY_URL", raising=False)
+    monkeypatch.delenv("YOUTUBE_HTTP_PROXY", raising=False)
+    monkeypatch.delenv("YOUTUBE_HTTPS_PROXY", raising=False)
+    assert ytbot._build_youtube_proxy_config() is None
+
+    # 2. Generic Proxy Config
+    monkeypatch.setenv("YOUTUBE_PROXY_URL", "socks5h://127.0.0.1:1080")
+    generic_cfg = ytbot._build_youtube_proxy_config()
+    assert generic_cfg is not None
+    assert generic_cfg.to_requests_dict() == {
+        "http": "socks5h://127.0.0.1:1080",
+        "https": "socks5h://127.0.0.1:1080",
+    }
+
+    # 3. Webshare Proxy Config takes priority when credentials are set
+    monkeypatch.setenv("WEBSHARE_PROXY_USERNAME", "myuser")
+    monkeypatch.setenv("WEBSHARE_PROXY_PASSWORD", "mypass")
+    monkeypatch.setenv("WEBSHARE_PROXY_LOCATIONS", "vn, sg")
+    ws_cfg = ytbot._build_youtube_proxy_config()
+    assert ws_cfg is not None
+    reqs_dict = ws_cfg.to_requests_dict()
+    assert "myuser-VN-SG-rotate:mypass@p.webshare.io:80" in reqs_dict["http"]
+

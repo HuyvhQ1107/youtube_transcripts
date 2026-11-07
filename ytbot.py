@@ -20,6 +20,11 @@ from typing import Any, List, Optional, Tuple
 
 from dotenv import load_dotenv
 from youtube_transcript_api import YouTubeTranscriptApi
+try:
+    from youtube_transcript_api.proxies import GenericProxyConfig, WebshareProxyConfig
+except ImportError:  # pragma: no cover
+    GenericProxyConfig = None  # type: ignore[assignment,misc]
+    WebshareProxyConfig = None  # type: ignore[assignment,misc]
 
 try:
     from langchain_text_splitters import RecursiveCharacterTextSplitter
@@ -85,6 +90,49 @@ def get_video_id(url: str) -> Optional[str]:
     return None
 
 
+def _build_youtube_proxy_config() -> Any:
+    """
+    Build a `youtube-transcript-api` proxy configuration from environment variables
+    to work around YouTube cloud IP blocks (RequestBlocked / IpBlocked on Oracle Cloud, AWS, GCP, etc.):
+    1. Webshare Residential Rotating Proxy: `WEBSHARE_PROXY_USERNAME` + `WEBSHARE_PROXY_PASSWORD`
+       (plus optional comma-separated `WEBSHARE_PROXY_LOCATIONS`, e.g. 'vn,sg,us')
+    2. Generic HTTP/HTTPS/SOCKS5 Proxy: `YOUTUBE_PROXY_URL`, `YOUTUBE_HTTP_PROXY`, or `YOUTUBE_HTTPS_PROXY`
+       (e.g., `http://user:pass@host:port` or `socks5h://warp:1080`)
+    """
+    ws_user = os.getenv("WEBSHARE_PROXY_USERNAME", "").strip()
+    ws_pass = os.getenv("WEBSHARE_PROXY_PASSWORD", "").strip()
+    if ws_user and ws_pass and WebshareProxyConfig is not None:
+        locations_raw = os.getenv("WEBSHARE_PROXY_LOCATIONS", "").strip()
+        locations = [loc.strip() for loc in locations_raw.split(",") if loc.strip()] if locations_raw else None
+        return WebshareProxyConfig(
+            proxy_username=ws_user,
+            proxy_password=ws_pass,
+            filter_ip_locations=locations,
+        )
+
+    generic_url = os.getenv("YOUTUBE_PROXY_URL", "").strip()
+    http_url = os.getenv("YOUTUBE_HTTP_PROXY", "").strip() or generic_url or None
+    https_url = os.getenv("YOUTUBE_HTTPS_PROXY", "").strip() or generic_url or None
+    if (http_url or https_url) and GenericProxyConfig is not None:
+        return GenericProxyConfig(
+            http_url=http_url,
+            https_url=https_url,
+        )
+
+    return None
+
+
+def _create_youtube_transcript_api() -> Any:
+    """Instantiate `YouTubeTranscriptApi`, passing `proxy_config` only when configured."""
+    proxy_config = _build_youtube_proxy_config()
+    if proxy_config is not None:
+        try:
+            return YouTubeTranscriptApi(proxy_config=proxy_config)
+        except TypeError:  # Fallback if YouTubeTranscriptApi is mocked with a zero-arg lambda
+            return YouTubeTranscriptApi()
+    return YouTubeTranscriptApi()
+
+
 def get_transcript(url: str, preferred_languages: Optional[List[str]] = None) -> Optional[List[Any]]:
     """
     Fetch the transcript for a given YouTube URL.
@@ -104,7 +152,7 @@ def get_transcript(url: str, preferred_languages: Optional[List[str]] = None) ->
         preferred_languages = ["en", "vi"]
 
     try:
-        ytt_api = YouTubeTranscriptApi()
+        ytt_api = _create_youtube_transcript_api()
         if hasattr(ytt_api, "list"):
             transcript_list = list(ytt_api.list(video_id))
         else:  # Fallback for older youtube-transcript-api versions

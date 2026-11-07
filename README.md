@@ -57,6 +57,40 @@ Open **`http://localhost:7860`** in your browser.
 
 ---
 
+## Run with Docker
+
+Ensure you have configured your `.env` file with a valid `GOOGLE_API_KEY`.
+
+### Option 1: Using Docker Compose (Recommended)
+
+```powershell
+# Build and start the container in the background
+docker compose up -d --build
+
+# View real-time logs
+docker compose logs -f
+
+# Stop the container
+docker compose down
+```
+
+### Option 2: Using Docker CLI
+
+```powershell
+# Build the Docker image
+docker build -t youtube-transcripts-bot .
+
+# Run the container using your .env file
+docker run -d --name youtube-transcripts-bot -p 7860:7860 --env-file .env youtube-transcripts-bot
+```
+
+> **Tip**: If you want to run the FastAPI interface (`app.py`) instead of Gradio (`ytbot.py`), override the startup command:
+> ```powershell
+> docker run -d --name youtube-transcripts-api -p 7860:7860 --env-file .env youtube-transcripts-bot uvicorn app:app --host 0.0.0.0 --port 7860
+> ```
+
+---
+
 ## Example Test Flow
 
 1. **YouTube Video URL**: `https://www.youtube.com/watch?v=T-D1OfcDW1M`
